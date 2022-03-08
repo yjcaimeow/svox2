@@ -2,12 +2,16 @@ from .nerf_dataset import NeRFDataset
 from .llff_dataset import LLFFDataset
 from .nsvf_dataset import NSVFDataset
 from .co3d_dataset import CO3DDataset
+from .waymo_dataset import WaymoDataset
 from os import path
 
 def auto_dataset(root : str, *args, **kwargs):
     if path.isfile(path.join(root, 'apple', 'eval_batches_multisequence.json')):
         print("Detected CO3D dataset")
         return CO3DDataset(root, *args, **kwargs)
+    elif path.isfile(path.join(root, 'segment-10061305430875486848_1080_000_1100_000_with_camera_labels.tfrecord')):
+        print("Detected WaymoDataset dataset")
+        return WaymoDataset(root, *args, **kwargs)
     elif path.isfile(path.join(root, 'poses_bounds.npy')):
         print("Detected LLFF dataset")
         return LLFFDataset(root, *args, **kwargs)

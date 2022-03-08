@@ -265,7 +265,8 @@ with open(path.join(args.train_dir, 'args.json'), 'w') as f:
 torch.manual_seed(20200823)
 np.random.seed(20200823)
 
-factor = 1
+factor = 8
+#data_dir = '/home/xschen/yjcai/svox2/nerf_synthetic'
 dset = datasets[args.dataset_type](
                args.data_dir,
                split="train",
@@ -273,7 +274,6 @@ dset = datasets[args.dataset_type](
                factor=factor,
                n_images=args.n_train,
                **config_util.build_data_options(args))
-
 if args.background_nlayers > 0 and not dset.should_use_background:
     warn('Using a background model for dataset type ' + str(type(dset)) + ' which typically does not use background')
 
@@ -377,9 +377,11 @@ while True:
         print('Eval step')
         with torch.no_grad():
             stats_test = {'psnr' : 0.0, 'mse' : 0.0}
+            stats_train = {'psnr' : 0.0, 'mse' : 0.0}
 
             # Standard set
-            N_IMGS_TO_EVAL = min(20 if epoch_id > 0 else 5, dset_test.n_images)
+            N_IMGS_TO_EVAL = dset_test.n_images
+            #N_IMGS_TO_EVAL = min(20 if epoch_id > 0 else 5, dset_test.n_images)
             N_IMGS_TO_SAVE = N_IMGS_TO_EVAL # if not args.tune_mode else 1
             img_eval_interval = dset_test.n_images // N_IMGS_TO_EVAL
             img_save_interval = (N_IMGS_TO_EVAL // N_IMGS_TO_SAVE)
@@ -392,7 +394,7 @@ while True:
             #             154]
             #  img_save_interval = 1
 
-            n_images_gen = 0
+            n_images_gen, n_images_gen_train, n_images_gen_test = 0, 0, 0
             for i, img_id in tqdm(enumerate(img_ids), total=len(img_ids)):
                 c2w = dset_test.c2w[img_id].to(device=device)
                 cam = svox2.Camera(c2w,
@@ -431,8 +433,14 @@ while True:
                 if math.isnan(psnr):
                     print('NAN PSNR', i, img_id, mse_num)
                     assert False
-                stats_test['mse'] += mse_num
-                stats_test['psnr'] += psnr
+                if i%10==0:
+                    stats_test['mse'] += mse_num
+                    stats_test['psnr'] += psnr
+                    n_images_gen_test += 1
+                else:
+                    stats_train['mse'] += mse_num
+                    stats_train['psnr'] += psnr
+                    n_images_gen_train += 1
                 n_images_gen += 1
 
             if grid.basis_type == svox2.BASIS_TYPE_3D_TEXTURE or \
@@ -458,14 +466,19 @@ while True:
                 summary_writer.add_image(f'test/spheric',
                         sphfuncs_cmapped, global_step=gstep_id_base, dataformats='HWC')
                 # END add spherical map visualization
-
-            stats_test['mse'] /= n_images_gen
-            stats_test['psnr'] /= n_images_gen
+            print (n_images_gen, 'n_images_gen', n_images_gen_test, n_images_gen_train)
+            #stats_test['mse'] /= n_images_gen
+            #stats_test['psnr'] /= n_images_gen
+            stats_test['mse'] /= n_images_gen_test
+            stats_test['psnr'] /= n_images_gen_test
+            stats_train['mse'] /= n_images_gen_train
+            stats_train['psnr'] /= n_images_gen_train
             for stat_name in stats_test:
                 summary_writer.add_scalar('test/' + stat_name,
                         stats_test[stat_name], global_step=gstep_id_base)
             summary_writer.add_scalar('epoch_id', float(epoch_id), global_step=gstep_id_base)
-            print('eval stats:', stats_test)
+            print('eval stats test:', stats_test)
+            print('eval stats train:', stats_train)
     if epoch_id % max(factor, args.eval_every) == 0: #and (epoch_id > 0 or not args.tune_mode):
         # NOTE: we do an eval sanity check, if not in tune_mode
         eval_step()
